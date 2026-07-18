@@ -107,21 +107,34 @@ const releaseSeatsAndDeleteBooking = inngest.createFunction(
 const sendBookingConfirmationEmail = inngest.createFunction(
   {
     id: "send-booking-confirmation-email",
-    event: "app/show-booked",
+    triggers: { event: "app/show-booked" },
   },
   async ({ event, step }) => {
     const { bookingId } = event.data;
-    const booking = await Booking.findById(bookingId)
-      .populate({
-        path: "show",
-        populate: { path: "movie", model: "Movie" },
-      })
-      .populate("user");
 
-    await sendEmail({
-      to: booking.user.email,
-      subject: `Payment Confirmation: "${booking.show.movie.title} "booked`,
-      body: `<div style="font-family: Arial, sans-serif; line-height: 1.5;">
+    await step.run("send-booking-confirmation-email", async () => {
+      const booking = await Booking.findById(bookingId)
+        .populate({
+          path: "show",
+          populate: {
+            path: "movie",
+            model: "Movie",
+          },
+        })
+        .populate("user");
+
+      if (!booking) {
+        throw new Error("Booking not found");
+      }
+
+      if (!booking.user?.email) {
+        throw new Error("User email not found");
+      }
+
+      await sendEmail({
+        to: booking.user.email,
+        subject: `Payment Confirmation: "${booking.show.movie.title}" booked`,
+        body: `<div style="font-family: Arial, sans-serif; line-height: 1.5;">
   <h2>Hi ${booking.user.name},</h2>
 
   <p>
@@ -153,8 +166,9 @@ const sendBookingConfirmationEmail = inngest.createFunction(
     — QuickShow Team
   </p>
 </div>`,
+      });
     });
-  },
+  }
 );
 
 export const functions = [
