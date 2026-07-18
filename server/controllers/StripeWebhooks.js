@@ -3,6 +3,8 @@ import Booking from "../models/Booking.js";
 import { inngest } from "../inngest/index.js";
 
 export const stripeWebhooks = async (request, response) => {
+  console.log("Stripe webhook hit");
+
   const stripeInstance = new Stripe(process.env.STRIPE_SECRET_KEY);
   const sig = request.headers["stripe-signature"];
 
@@ -14,6 +16,8 @@ export const stripeWebhooks = async (request, response) => {
       sig,
       process.env.STRIPE_WEBHOOK_SECRET
     );
+
+    console.log("Stripe event type:", event.type);
   } catch (error) {
     console.log("Stripe webhook signature error:", error.message);
     return response.status(400).send(`Webhook Error: ${error.message}`);
@@ -22,6 +26,8 @@ export const stripeWebhooks = async (request, response) => {
   try {
     switch (event.type) {
       case "payment_intent.succeeded": {
+        console.log("Payment intent succeeded");
+
         const paymentIntent = event.data.object;
 
         const sessionList = await stripeInstance.checkout.sessions.list({
@@ -29,6 +35,9 @@ export const stripeWebhooks = async (request, response) => {
         });
 
         const session = sessionList.data[0];
+
+        console.log("Stripe session:", session?.id);
+        console.log("Stripe metadata:", session?.metadata);
 
         if (!session) {
           throw new Error("Stripe checkout session not found");
