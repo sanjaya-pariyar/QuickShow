@@ -36,7 +36,7 @@ export const stripeWebhooks = async (request, response) => {
 
         const session = sessionList.data[0];
 
-        console.log("Stripe session:", session?.id);
+        console.log("Stripe session:", session.id);
         console.log("Stripe metadata:", session?.metadata);
 
         if (!session) {
