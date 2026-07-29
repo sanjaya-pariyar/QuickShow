@@ -11,4 +11,4 @@ bookingRouter.get('/verify-ticket/:ticketCode', verifyTicket)
 
 
 
-export default bookingRouter;x
+export default bookingRouter;
