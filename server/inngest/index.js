@@ -130,7 +130,8 @@ const sendBookingConfirmationEmail = inngest.createFunction(
       if (!booking.user?.email) {
         throw new Error("User email not found");
       }
-
+      // QR CODE ADDITION: create ticket verification link
+      const ticketVerifyUrl = `${process.env.CLIENT_URL}/verify-ticket/${booking.ticketCode}`;
       await sendEmail({
         to: booking.user.email,
         subject: `Payment Confirmation: "${booking.show.movie.title}" booked`,
@@ -157,6 +158,13 @@ const sendBookingConfirmationEmail = inngest.createFunction(
       timeZone: "Asia/Kolkata",
     })}
   </p>
+  <p>
+  <strong>Verify Your Ticket:</strong>
+  <br />
+  <a href="${ticketVerifyUrl}" style="color: #F84565;">
+    ${ticketVerifyUrl}
+  </a>
+</p>
 
   <p>Enjoy the show! 🍿</p>
 

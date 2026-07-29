@@ -7,6 +7,15 @@ const bookingSchema = new mongoose.Schema({
     bookedSeats: {type: Array, required: true},
     isPaid: {type: Boolean, default:false},
     paymentLink: {type: String},
+    ticketCode: {
+      type: String,
+      unique: true,
+      sparse: true,
+    },
+      isTicketUsed: {
+      type: Boolean,
+      default: false,
+    },
 }, {timestamps: true})
 
 const Booking = mongoose.model("Booking", bookingSchema);

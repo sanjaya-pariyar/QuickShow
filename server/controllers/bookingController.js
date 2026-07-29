@@ -4,6 +4,20 @@ import Show from "../models/Show.js";
 import Booking from "../models/Booking.js";
 import stripe from 'stripe';
 import { inngest } from "../inngest/index.js";
+import crypto from "crypto";
+
+//  function to generate unique ticket code
+const generateTicketCode = async () => {
+  let ticketCode;
+  let existingTicket;
+
+  do {
+    ticketCode = `QS-${crypto.randomBytes(4).toString("hex").toUpperCase()}`;
+    existingTicket = await Booking.findOne({ ticketCode });
+  } while (existingTicket);
+
+  return ticketCode;
+};
 
 const checkSeatsAvailability = async (showId, selectedSeats) => {
   try {
@@ -62,6 +76,9 @@ export const createBooking = async (req, res) => {
       });
     }
 
+    //  generate unique ticket code for this booking
+    const ticketCode = await generateTicketCode();
+
     // create a new booking
     const booking = await Booking.create({
       user: userId,
@@ -69,6 +86,10 @@ export const createBooking = async (req, res) => {
       amount: showData.showPrice * selectedSeats.length,
       bookedSeats: selectedSeats,
       isPaid: false,
+
+      //save ticket code for QR verification
+      ticketCode: ticketCode,
+      isTicketUsed: false,
     });
 
     // mark selected seats as occupied
@@ -100,7 +121,10 @@ export const createBooking = async (req, res) => {
       line_items: line_items,
       mode: 'payment',
       metadata: {
-        bookingId: booking._id.toString()
+        bookingId: booking._id.toString(),
+
+        // store ticket code in Stripe metadata also
+        ticketCode: booking.ticketCode,
       },
       expires_at: Math.floor(Date.now() / 1000) + 30 * 60 //Expires in 30 minutes
     })
@@ -156,6 +180,95 @@ export const getOccupiedSeats = async (req, res) => {
 
     res.json({
       success: false,
+      message: error.message,
+    });
+  }
+};
+
+// QR CODE ADDITION: verify ticket using ticketCode from QR scan
+export const verifyTicket = async (req, res) => {
+  try {
+    const { ticketCode } = req.params;
+
+    if (!ticketCode) {
+      return res.json({
+        success: false,
+        valid: false,
+        message: "Ticket code is required",
+      });
+    }
+
+    const booking = await Booking.findOne({ ticketCode })
+      .populate({
+        path: "show",
+        populate: {
+          path: "movie",
+          model: "Movie",
+        },
+      })
+      .populate("user");
+
+    if (!booking) {
+      return res.json({
+        success: false,
+        valid: false,
+        message: "Invalid ticket. Booking not found.",
+      });
+    }
+
+    if (!booking.isPaid) {
+      return res.json({
+        success: true,
+        valid: false,
+        message: "Ticket is not valid because payment is not completed.",
+        booking: {
+          ticketCode: booking.ticketCode,
+          isPaid: booking.isPaid,
+        },
+      });
+    }
+
+    if (!booking.show || !booking.show.movie) {
+      return res.json({
+        success: false,
+        valid: false,
+        message: "Invalid ticket. Show or movie details not found.",
+      });
+    }
+
+    res.json({
+      success: true,
+      valid: true,
+      message: "Ticket is valid.",
+      booking: {
+        ticketCode: booking.ticketCode,
+        isPaid: booking.isPaid,
+        isTicketUsed: booking.isTicketUsed,
+        bookedSeats: booking.bookedSeats,
+        amount: booking.amount,
+        createdAt: booking.createdAt,
+        user: {
+          name: booking.user?.name,
+          email: booking.user?.email,
+        },
+        show: {
+          showDateTime: booking.show.showDateTime,
+          showPrice: booking.show.showPrice,
+          movie: {
+            title: booking.show.movie.title,
+            poster_path: booking.show.movie.poster_path,
+            backdrop_path: booking.show.movie.backdrop_path,
+            runtime: booking.show.movie.runtime,
+          },
+        },
+      },
+    });
+  } catch (error) {
+    console.log(error.message);
+
+    res.json({
+      success: false,
+      valid: false,
       message: error.message,
     });
   }
