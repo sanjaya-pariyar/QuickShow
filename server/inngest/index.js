@@ -133,7 +133,6 @@ const sendBookingConfirmationEmail = inngest.createFunction(
       // QR CODE ADDITION: create ticket verification link
       const clientUrl = process.env.CLIENT_URL || "http://localhost:5173";
       const ticketVerifyUrl = `${clientUrl}/verify-ticket/${booking.ticketCode}`;
-      const ticketVerifyUrl = `${process.env.CLIENT_URL}/verify-ticket/${booking.ticketCode}`;
       await sendEmail({
         to: booking.user.email,
         subject: `Payment Confirmation: "${booking.show.movie.title}" booked`,
