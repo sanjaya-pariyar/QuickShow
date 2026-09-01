@@ -154,54 +154,14 @@ export const getRecommendedMovies = async (req, res) => {
 
     if (favorites.length === 0) {
 
-      // Rank available movies by rating using Selection Sort
-
-      for (let i = 0; i < availableMovies.length - 1; i++) {
-        let highestIndex = i;
-        for (let j = i + 1; j < availableMovies.length; j++) {
-          let currentRating = 0;
-          let highestRating = 0;
-          if (availableMovies[j].vote_average !== undefined) {
-            currentRating = availableMovies[j].vote_average;
-          }
-          if (availableMovies[highestIndex].vote_average !== undefined) {
-            highestRating = availableMovies[highestIndex].vote_average;
-          }
-          if (currentRating > highestRating) {
-            highestIndex = j;
-          }
-        }
-
-        // Swap
-        if (highestIndex !== i) {
-          const temporaryMovie = availableMovies[i];
-          availableMovies[i] = availableMovies[highestIndex];
-          availableMovies[highestIndex] = temporaryMovie;
-        }
-      }
-
-      // Take top 8 available movies 
-      const fallbackRecommendations = [];
-      let fallbackLimit = 8;
-      if (availableMovies.length < fallbackLimit) {
-        fallbackLimit = availableMovies.length;
-      }
-
-      for (let i = 0; i < fallbackLimit; i++) {
-        const movieData = availableMovies[i].toObject();
-        movieData.recommendationType = "popular";
-        fallbackRecommendations[fallbackRecommendations.length] = movieData;
-      }
-
-      // Return cold-start recommendations  
-      return res.json({
-        success: true,
-        recommendations: fallbackRecommendations,
-        recommendationMethod: "cold-start",
-        message:
-          "Popular upcoming movies are shown because the user has no favourites yet.",
-      });
-    }
+  return res.json({
+    success: true,
+    recommendations: [],
+    recommendationMethod: "cold-start",
+    message:
+      "Add some movies to your favourites to receive personalised recommendations.",
+  });
+}
 
   
     // Retrieve favourite movie documents 
