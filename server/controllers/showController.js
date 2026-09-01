@@ -1,6 +1,7 @@
 import axios from "axios"
 import Movie from "../models/Movie.js";
 import Show from "../models/Show.js";
+import Booking from "../models/Booking.js";
 import { inngest } from "../inngest/index.js";
 
 
@@ -174,6 +175,141 @@ export const getShow = async (req, res) => {
     res.json({
       success: false,
       message: error.message,
+    });
+  }
+};
+
+
+
+// Update existing show
+export const updateShow = async (req, res) => {
+  try {
+    const { showId } = req.params;
+
+    const {
+      showDateTime,
+      showPrice,
+    } = req.body;
+
+    // Check Show ID
+
+    if (!showId) {
+      return res.status(400).json({
+        success: false,
+        message: "Show ID is required",
+      });
+    }
+
+    // Find existing show
+
+    const show = await Show.findById(showId);
+
+    if (!show) {
+      return res.status(404).json({
+        success: false,
+        message: "Show not found",
+      });
+    }
+
+    // Check whether paid bookings exist
+
+    const paidBooking = await Booking.findOne({
+      show: showId,
+      isPaid: true,
+    });
+
+    // Protect shows with paid bookings
+
+    if (paidBooking) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "This show cannot be updated because paid bookings already exist.",
+      });
+    }
+
+    // Update show date/time
+
+    if (showDateTime !== undefined) {
+
+      const newDateTime =
+        new Date(showDateTime);
+
+      // Validate date
+      if (
+        isNaN(
+          newDateTime.getTime()
+        )
+      ) {
+
+        return res.status(400).json({
+          success: false,
+          message:
+            "Invalid show date and time",
+        });
+      }
+
+
+      // Show must remain in future
+      if (
+        newDateTime <= new Date()
+      ) {
+
+        return res.status(400).json({
+          success: false,
+          message:
+            "Show date and time must be in the future",
+        });
+      }
+
+      show.showDateTime =
+        newDateTime;
+    }
+
+    // Update ticket price
+
+    if (showPrice !== undefined) {
+
+      const price =
+        Number(showPrice);
+
+      if (
+        isNaN(price) ||
+        price <= 0
+      ) {
+
+        return res.status(400).json({
+          success: false,
+          message:
+            "Show price must be greater than zero",
+        });
+      }
+      show.showPrice =
+        price;
+    }
+
+    // Save changes
+
+    await show.save();
+
+    return res.json({
+      success: true,
+      message:
+        "Show updated successfully",
+      show,
+    });
+
+
+  } catch (error) {
+
+    console.error(
+      error.message
+    );
+
+    return res.status(500).json({
+      success: false,
+      message:
+        error.message,
     });
   }
 };
