@@ -4,7 +4,7 @@ import { clerkClient } from "@clerk/express";
 import Booking from "../models/Booking.js";
 import Movie from "../models/Movie.js";
 import Show from "../models/Show.js";
-import {buildMovieVector, buildUserPreferenceVector,cosineSimilarity} from "../utils/recommendationAlgorithm.js";
+import {buildMovieVector, buildUserPreferenceVector,cosineSimilarity, normalizeRating} from "../utils/recommendationAlgorithm.js";
 
 export const getUserBookings = async (req, res) => {
   try {
@@ -194,29 +194,43 @@ export const getRecommendedMovies = async (req, res) => {
     }
  
     // Calculate Cosine Similarity  for every candidate movie
-    const scoredMovies = [];
-    for (let i = 0; i < candidateMovies.length; i++) {
+const scoredMovies = [];
+    for (let i = 0;i < candidateMovies.length;i++) {
       const movie = candidateMovies[i];
       // Build candidate movie vector
       const movieVector = buildMovieVector(movie);
-      // Compare user profile with candidate movie
- 
-      const similarityScore = cosineSimilarity(userVector, movieVector);
+      // Calculate content similarity
+      const similarityScore =cosineSimilarity(userVector,movieVector);
+      // Normalize movie rating
+      const ratingScore = normalizeRating(movie.vote_average);
+      // Hybrid recommendation score
+      const finalScore =(similarityScore * 0.8) + (ratingScore * 0.2);
 
-      // Convert Mongoose document into plain JavaScript object
+      // Convert Mongoose document
       const movieData = movie.toObject();
+      // Store different scores
+      movieData.similarityScore = similarityScore;
+      movieData.ratingScore = ratingScore;
+      movieData.recommendationScore = finalScore;
 
-      // Attach recommendation score
-      movieData.recommendationScore = similarityScore;
       scoredMovies[scoredMovies.length] = movieData;
-    }
+}
+
+    
 
 
-    // Remove movies with similarity score = 0
+    // Remove movies with weak content similarity
     const relevantMovies = [];
+    const minimumSimilarity = 0.05;
+
     for (let i = 0; i < scoredMovies.length; i++) {
-      if (scoredMovies[i].recommendationScore > 0) {
-        relevantMovies[relevantMovies.length] = scoredMovies[i];
+      if (
+        scoredMovies[i].similarityScore >=
+        minimumSimilarity
+      ) {
+        relevantMovies[
+          relevantMovies.length
+        ] = scoredMovies[i];
       }
     }
 

@@ -17,7 +17,7 @@ export const buildMovieVector = (movie) => {
       if (genreName !== "") {
         const feature =
           "genre:" + genreName.toLowerCase();
-        vector[feature] = 1;
+        vector[feature] = 2;
       }
     }
   }
@@ -40,7 +40,7 @@ export const buildMovieVector = (movie) => {
       if (castName !== "") {
         const feature =
           "cast:" + castName.toLowerCase();
-        vector[feature] = 1;
+        vector[feature] = 3;
       }
     }
   }
@@ -161,4 +161,18 @@ export const cosineSimilarity = (vectorA, vectorB) => {
 
 
   return similarity;
+};
+
+
+// Convert movie rating from 0-10
+// into 0-1 range
+
+export const normalizeRating = (rating) => {
+  if (
+    rating === undefined ||
+    rating === null
+  ) {
+    return 0;
+  }
+  return rating / 10;
 };

@@ -78,6 +78,51 @@ const ListShows = () => {
       toast.error(error.response?.data?.message || "Update failed");
     }
   };
+
+  
+  const deleteShow = async (showId) => {
+  try {
+    const confirmDelete =
+      window.confirm(
+        "Are you sure you want to delete this show?"
+      );
+    if (!confirmDelete) {
+      return;
+    }
+    const {data} =
+      await axios.delete(
+        `/api/show/${showId}`,
+        {
+          headers:{
+            Authorization:
+            `Bearer ${await getToken()}`
+          }
+        }
+      );
+    if(data.success){
+
+      toast.success(
+        "Show deleted successfully"
+      );
+
+      getAllShows();
+    }
+    else{
+
+      toast.error(
+        data.message
+      );
+    }
+  } catch(error){
+    console.error(error);
+    toast.error(
+      error.response?.data?.message ||
+      "Delete failed"
+    );
+
+  }
+
+};
   return !loading ? (
     <>
       <Title text1="List" text2="Shows" />
@@ -167,62 +212,6 @@ const ListShows = () => {
     <Loading />
   );
 };
-const deleteShow = async (showId) => {
 
-  try {
-
-    const confirmDelete =
-      window.confirm(
-        "Are you sure you want to delete this show?"
-      );
-
-
-    if (!confirmDelete) {
-      return;
-    }
-
-
-    const {data} =
-      await axios.delete(
-        `/api/show/${showId}`,
-        {
-          headers:{
-            Authorization:
-            `Bearer ${await getToken()}`
-          }
-        }
-      );
-
-
-    if(data.success){
-
-      toast.success(
-        "Show deleted successfully"
-      );
-
-      getAllShows();
-
-    }
-    else{
-
-      toast.error(
-        data.message
-      );
-
-    }
-
-
-  } catch(error){
-
-    console.error(error);
-
-    toast.error(
-      error.response?.data?.message ||
-      "Delete failed"
-    );
-
-  }
-
-};
 
 export default ListShows;
