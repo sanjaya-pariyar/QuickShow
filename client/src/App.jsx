@@ -19,7 +19,6 @@ import { SignIn } from "@clerk/react";
 import Loading from "./components/Loading";
 import TicketVerify from "./pages/TicketVerify";
 
-
 const AdminProtectedRoute = () => {
   const { user, isAdmin, isLoaded, adminChecked } = useAppContext();
 

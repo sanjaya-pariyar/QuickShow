@@ -185,13 +185,10 @@ export const getShow = async (req, res) => {
 export const updateShow = async (req, res) => {
   try {
     const { showId } = req.params;
-
     const {
       showDateTime,
       showPrice,
     } = req.body;
-
-    // Check Show ID
 
     if (!showId) {
       return res.status(400).json({
@@ -199,11 +196,7 @@ export const updateShow = async (req, res) => {
         message: "Show ID is required",
       });
     }
-
-    // Find existing show
-
     const show = await Show.findById(showId);
-
     if (!show) {
       return res.status(404).json({
         success: false,
@@ -212,14 +205,12 @@ export const updateShow = async (req, res) => {
     }
 
     // Check whether paid bookings exist
-
     const paidBooking = await Booking.findOne({
       show: showId,
       isPaid: true,
     });
 
     // Protect shows with paid bookings
-
     if (paidBooking) {
       return res.status(400).json({
         success: false,
@@ -229,9 +220,7 @@ export const updateShow = async (req, res) => {
     }
 
     // Update show date/time
-
     if (showDateTime !== undefined) {
-
       const newDateTime =
         new Date(showDateTime);
 
@@ -241,7 +230,6 @@ export const updateShow = async (req, res) => {
           newDateTime.getTime()
         )
       ) {
-
         return res.status(400).json({
           success: false,
           message:
@@ -254,25 +242,19 @@ export const updateShow = async (req, res) => {
       if (
         newDateTime <= new Date()
       ) {
-
         return res.status(400).json({
           success: false,
           message:
             "Show date and time must be in the future",
         });
       }
-
       show.showDateTime =
         newDateTime;
     }
-
     // Update ticket price
-
     if (showPrice !== undefined) {
-
       const price =
         Number(showPrice);
-
       if (
         isNaN(price) ||
         price <= 0
@@ -287,9 +269,6 @@ export const updateShow = async (req, res) => {
       show.showPrice =
         price;
     }
-
-    // Save changes
-
     await show.save();
 
     return res.json({
@@ -299,13 +278,64 @@ export const updateShow = async (req, res) => {
       show,
     });
 
-
   } catch (error) {
-
     console.error(
       error.message
     );
+    return res.status(500).json({
+      success: false,
+      message:
+        error.message,
+    });
+  }
+};
 
+
+// Delete existing show
+export const deleteShow = async (req, res) => {
+  try {
+    const { showId } = req.params;
+    if (!showId) {
+      return res.status(400).json({
+        success: false,
+        message: "Show ID is required",
+      });
+
+    }
+    const show =
+      await Show.findById(showId);
+    if (!show) {
+      return res.status(404).json({
+        success: false,
+        message: "Show not found",
+      });
+    }
+    // Check paid bookings
+
+    const paidBooking =
+      await Booking.findOne({
+        show: showId,
+        isPaid: true,
+      });
+    if (paidBooking) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "This show cannot be deleted because paid bookings already exist.",
+      });
+    }
+    // Delete show
+    await Show.findByIdAndDelete(showId);
+    return res.json({
+      success: true,
+      message:
+        "Show deleted successfully",
+    });
+
+  } catch (error) {
+    console.error(
+      error.message
+    );
     return res.status(500).json({
       success: false,
       message:
