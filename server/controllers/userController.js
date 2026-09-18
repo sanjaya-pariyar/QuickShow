@@ -277,6 +277,10 @@ const scoredMovies = [];
 export const getCollaborativeRecommendations = async (req, res) => {
   try {
     const { userId } = req.auth();
+    console.log(
+  "Collaborative Request User ID:",
+  userId
+);
     if (!userId) {
       return res.status(401).json({
         success: false,
@@ -361,6 +365,12 @@ export const getCollaborativeRecommendations = async (req, res) => {
 
     const candidateMovies = calculateNeighborWeightedScores( currentUserFavorites, nearestNeighbors);
 
+    console.log(
+  "User:",
+  userId,
+  "Candidate Movies:",
+  candidateMovies
+);
         // DEBUG 4
     console.log(
       "Candidate Movies:",
