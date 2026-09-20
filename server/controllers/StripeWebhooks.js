@@ -48,33 +48,59 @@ export const stripeWebhooks = async (request, response) => {
           throw new Error("Booking ID not found in Stripe session metadata");
         }
 
-        // Get current booking before updating
-        const booking = await Booking.findById(bookingId);
+        // Atomically mark booking as paid only
+        // if the reservation is still active
+        const paidBooking = await Booking.findOneAndUpdate(
+          {
+            _id: bookingId,
 
-        if (!booking) {
-          throw new Error("Booking not found");
-        }
+            paymentMethod: "stripe",
 
-        // Prevent duplicate webhook processing
-        if (booking.isPaid || booking.paymentStatus === "paid") {
-          console.log("Booking already paid:", bookingId);
+            isPaid: false,
+
+            paymentStatus: {
+              $in: ["pending", "failed"],
+            },
+
+            reservationExpiresAt: {
+              $gt: new Date(),
+            },
+          },
+          {
+            $set: {
+              isPaid: true,
+              paymentStatus: "paid",
+              paymentLink: "",
+            },
+          },
+          {
+            new: true,
+          },
+        );
+
+        if (!paidBooking) {
+          const currentBooking = await Booking.findById(bookingId);
+
+          if (!currentBooking) {
+            throw new Error("Booking not found");
+          }
+
+          if (
+            currentBooking.isPaid ||
+            currentBooking.paymentStatus === "paid"
+          ) {
+            console.log("Booking already paid:", bookingId);
+
+            break;
+          }
+
+          console.log(
+            "Stripe payment ignored because reservation is expired or inactive:",
+            bookingId,
+          );
 
           break;
         }
-
-        // Prevent expired booking from becoming paid
-        if (booking.paymentStatus === "expired") {
-          console.log("Payment received for expired booking:", bookingId);
-
-          break;
-        }
-
-        // Mark booking as paid
-        booking.isPaid = true;
-        booking.paymentStatus = "paid";
-        booking.paymentLink = "";
-
-        await booking.save();
 
         await inngest.send({
           name: "app/show.booked",
@@ -111,32 +137,49 @@ export const stripeWebhooks = async (request, response) => {
           break;
         }
 
-        const booking = await Booking.findById(bookingId);
+        const failedBooking = await Booking.findOneAndUpdate(
+          {
+            _id: bookingId,
 
-        if (!booking) {
-          console.log("Booking not found:", bookingId);
-          break;
-        }
+            paymentMethod: "stripe",
 
-        // Do not overwrite paid or expired bookings
-        if (
-          booking.isPaid ||
-          booking.paymentStatus === "paid" ||
-          booking.paymentStatus === "expired"
-        ) {
+            isPaid: false,
+
+            paymentStatus: {
+              $in: ["pending", "failed"],
+            },
+
+            reservationExpiresAt: {
+              $gt: new Date(),
+            },
+          },
+          {
+            $set: {
+              isPaid: false,
+              paymentStatus: "failed",
+            },
+          },
+          {
+            new: true,
+          },
+        );
+
+        if (!failedBooking) {
+          const currentBooking = await Booking.findById(bookingId);
+
+          if (!currentBooking) {
+            console.log("Booking not found:", bookingId);
+            break;
+          }
+
           console.log(
-            "Ignoring failed payment event for booking:",
+            "Ignoring Stripe failed-payment event for booking:",
             bookingId,
-            booking.paymentStatus,
+            currentBooking.paymentStatus,
           );
 
           break;
         }
-
-        booking.isPaid = false;
-        booking.paymentStatus = "failed";
-
-        await booking.save();
 
         console.log("Booking marked as failed:", bookingId);
 

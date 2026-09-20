@@ -159,6 +159,19 @@ export const verifyEsewaPayment = async (req, res) => {
       });
     }
 
+    // Do not apply payment to an expired reservation
+    if (
+      booking.paymentStatus === "expired" ||
+      !booking.reservationExpiresAt ||
+      new Date() >= new Date(booking.reservationExpiresAt)
+    ) {
+      return res.json({
+        success: false,
+        message:
+          "Reservation has expired. This payment can no longer be applied to the booking.",
+      });
+    }
+
     // Verify transaction directly with eSewa
     const statusUrl = new URL(process.env.ESEWA_STATUS_URL);
 
@@ -198,11 +211,39 @@ export const verifyEsewaPayment = async (req, res) => {
     }
 
     // Payment is now trusted
-    booking.isPaid = true;
-    booking.paymentStatus = "paid";
-    booking.paymentLink = "";
+    // Atomically mark payment as paid only if reservation is still active
+    const paidBooking = await Booking.findOneAndUpdate(
+      {
+        _id: booking._id,
 
-    await booking.save();
+        isPaid: false,
+
+        paymentStatus: {
+          $in: ["pending", "failed"],
+        },
+
+        reservationExpiresAt: {
+          $gt: new Date(),
+        },
+      },
+      {
+        $set: {
+          isPaid: true,
+          paymentStatus: "paid",
+          paymentLink: "",
+        },
+      },
+      {
+        new: true,
+      },
+    );
+
+    if (!paidBooking) {
+      return res.json({
+        success: false,
+        message: "Reservation expired before payment could be confirmed.",
+      });
+    }
 
     // Use same post-payment workflow as Stripe
     await inngest.send({
@@ -244,6 +285,58 @@ const checkSeatsAvailability = async (showId, selectedSeats) => {
   }
 };
 
+const reserveSeatsAtomically = async (showId, selectedSeats, userId) => {
+  const seatConditions = {};
+
+  const seatUpdates = {};
+
+  selectedSeats.forEach((seat) => {
+    seatConditions[`occupiedSeats.${seat}`] = {
+      $exists: false,
+    };
+
+    seatUpdates[`occupiedSeats.${seat}`] = userId;
+  });
+
+  const updatedShow = await Show.findOneAndUpdate(
+    {
+      _id: showId,
+      ...seatConditions,
+    },
+    {
+      $set: seatUpdates,
+    },
+    {
+      new: true,
+    },
+  );
+
+  return updatedShow;
+};
+
+const releaseReservedSeats = async (showId, selectedSeats, userId) => {
+  const seatConditions = {};
+  const unsetUpdates = {};
+
+  selectedSeats.forEach((seat) => {
+    seatConditions[`occupiedSeats.${seat}`] = userId;
+    unsetUpdates[`occupiedSeats.${seat}`] = "";
+  });
+
+  return await Show.findOneAndUpdate(
+    {
+      _id: showId,
+      ...seatConditions,
+    },
+    {
+      $unset: unsetUpdates,
+    },
+    {
+      new: true,
+    },
+  );
+};
+
 export const createBooking = async (req, res) => {
   try {
     const { userId } = req.auth();
@@ -272,14 +365,6 @@ export const createBooking = async (req, res) => {
     }
 
     // check if the seats are available for the selected show
-    const isAvailable = await checkSeatsAvailability(showId, selectedSeats);
-
-    if (!isAvailable) {
-      return res.json({
-        success: false,
-        message: "Selected seats are not available",
-      });
-    }
 
     // get the show details
     const showData = await Show.findById(showId).populate("movie");
@@ -288,6 +373,19 @@ export const createBooking = async (req, res) => {
       return res.json({
         success: false,
         message: "Show not found",
+      });
+    }
+
+    const reservedShow = await reserveSeatsAtomically(
+      showId,
+      selectedSeats,
+      userId,
+    );
+
+    if (!reservedShow) {
+      return res.json({
+        success: false,
+        message: "One or more selected seats are no longer available",
       });
     }
 
@@ -322,14 +420,6 @@ export const createBooking = async (req, res) => {
       ticketCode: ticketCode,
       isTicketUsed: false,
     });
-
-    // mark selected seats as occupied
-    selectedSeats.forEach((seat) => {
-      showData.occupiedSeats[seat] = userId;
-    });
-
-    showData.markModified("occupiedSeats");
-    await showData.save();
 
     // Stripe payment initialize can be added here later
     // Handle Stripe payment
@@ -384,13 +474,8 @@ export const createBooking = async (req, res) => {
           booking,
         });
       } catch (paymentError) {
-        // Release reserved seats
-        selectedSeats.forEach((seat) => {
-          delete showData.occupiedSeats[seat];
-        });
-
-        showData.markModified("occupiedSeats");
-        await showData.save();
+        // Safely release only this user's reserved seats
+        await releaseReservedSeats(showId, selectedSeats, userId);
 
         // Remove failed booking
         await Booking.findByIdAndDelete(booking._id);
