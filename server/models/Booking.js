@@ -12,6 +12,10 @@ const bookingSchema = new mongoose.Schema(
       enum: ["pending", "paid", "failed", "expired"],
       default: "pending",
     },
+    reservationExpiresAt: {
+      type: Date,
+      required: true,
+    },
     paymentLink: { type: String },
     ticketCode: {
       type: String,

@@ -91,6 +91,8 @@ export const createBooking = async (req, res) => {
       // Initial payment state
       paymentStatus: "pending",
 
+      reservationExpiresAt: new Date(Date.now() + 30 * 60 * 1000),
+
       // Save ticket code for QR verification
       ticketCode: ticketCode,
       isTicketUsed: false,
@@ -274,6 +276,118 @@ export const verifyTicket = async (req, res) => {
     res.json({
       success: false,
       valid: false,
+      message: error.message,
+    });
+  }
+};
+
+
+export const retryPayment = async (
+  req,
+  res
+) => {
+  try {
+    const { userId } = req.auth();
+    const { bookingId } = req.params;
+
+    if (!userId) {
+      return res.json({
+        success: false,
+        message: "Please login to continue",
+      });
+    }
+
+    const booking =
+      await Booking.findById(bookingId);
+
+    if (!booking) {
+      return res.json({
+        success: false,
+        message: "Booking not found",
+      });
+    }
+
+    // Only owner can retry payment
+    if (booking.user !== userId) {
+      return res.json({
+        success: false,
+        message:
+          "You are not allowed to access this booking",
+      });
+    }
+
+    // Already completed
+    if (
+      booking.isPaid ||
+      booking.paymentStatus === "paid"
+    ) {
+      return res.json({
+        success: false,
+        message:
+          "This booking has already been paid",
+      });
+    }
+
+    // Reservation already expired
+    if (
+      booking.paymentStatus === "expired" ||
+      !booking.reservationExpiresAt ||
+      new Date() >=
+        new Date(
+          booking.reservationExpiresAt
+        )
+    ) {
+      return res.json({
+        success: false,
+        message:
+          "Reservation has expired. Please select your seats again.",
+      });
+    }
+
+    // Only pending or failed payments can retry
+    if (
+      booking.paymentStatus !== "pending" &&
+      booking.paymentStatus !== "failed"
+    ) {
+      return res.json({
+        success: false,
+        message:
+          "Payment cannot be retried for this booking",
+      });
+    }
+
+    // Existing Stripe session must still exist
+    if (!booking.paymentLink) {
+      return res.json({
+        success: false,
+        message:
+          "Payment link is unavailable",
+      });
+    }
+
+    // A retry attempt becomes pending again
+    if (
+      booking.paymentStatus === "failed"
+    ) {
+      booking.paymentStatus = "pending";
+
+      await booking.save();
+    }
+
+    return res.json({
+      success: true,
+      url: booking.paymentLink,
+      reservationExpiresAt:
+        booking.reservationExpiresAt,
+      message:
+        "Payment retry available",
+    });
+
+  } catch (error) {
+    console.log(error.message);
+
+    return res.json({
+      success: false,
       message: error.message,
     });
   }

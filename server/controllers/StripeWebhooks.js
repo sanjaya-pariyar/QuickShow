@@ -35,13 +35,12 @@ export const stripeWebhooks = async (request, response) => {
         });
 
         const session = sessionList.data[0];
-
-        console.log("Stripe session:", session.id);
-        console.log("Stripe metadata:", session?.metadata);
-
         if (!session) {
           throw new Error("Stripe checkout session not found");
         }
+
+        console.log("Stripe session:", session.id);
+        console.log("Stripe metadata:", session?.metadata);
 
         const { bookingId } = session.metadata;
 
@@ -49,11 +48,33 @@ export const stripeWebhooks = async (request, response) => {
           throw new Error("Booking ID not found in Stripe session metadata");
         }
 
-        await Booking.findByIdAndUpdate(bookingId, {
-          isPaid: true,
-          paymentStatus: "paid",
-          paymentLink: "",
-        });
+        // Get current booking before updating
+        const booking = await Booking.findById(bookingId);
+
+        if (!booking) {
+          throw new Error("Booking not found");
+        }
+
+        // Prevent duplicate webhook processing
+        if (booking.isPaid || booking.paymentStatus === "paid") {
+          console.log("Booking already paid:", bookingId);
+
+          break;
+        }
+
+        // Prevent expired booking from becoming paid
+        if (booking.paymentStatus === "expired") {
+          console.log("Payment received for expired booking:", bookingId);
+
+          break;
+        }
+
+        // Mark booking as paid
+        booking.isPaid = true;
+        booking.paymentStatus = "paid";
+        booking.paymentLink = "";
+
+        await booking.save();
 
         await inngest.send({
           name: "app/show.booked",
@@ -90,10 +111,32 @@ export const stripeWebhooks = async (request, response) => {
           break;
         }
 
-        await Booking.findByIdAndUpdate(bookingId, {
-          isPaid: false,
-          paymentStatus: "failed",
-        });
+        const booking = await Booking.findById(bookingId);
+
+        if (!booking) {
+          console.log("Booking not found:", bookingId);
+          break;
+        }
+
+        // Do not overwrite paid or expired bookings
+        if (
+          booking.isPaid ||
+          booking.paymentStatus === "paid" ||
+          booking.paymentStatus === "expired"
+        ) {
+          console.log(
+            "Ignoring failed payment event for booking:",
+            bookingId,
+            booking.paymentStatus,
+          );
+
+          break;
+        }
+
+        booking.isPaid = false;
+        booking.paymentStatus = "failed";
+
+        await booking.save();
 
         console.log("Booking marked as failed:", bookingId);
 
