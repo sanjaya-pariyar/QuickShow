@@ -367,6 +367,7 @@ export const createBooking = async (req, res) => {
         });
 
         booking.paymentLink = session.url;
+        booking.paymentReference = session.id;
         await booking.save();
 
         await inngest.send({
@@ -760,27 +761,82 @@ export const retryPayment = async (req, res) => {
         message: "Payment cannot be retried for this booking",
       });
     }
+    // Retry Stripe payment
+    if (booking.paymentMethod === "stripe") {
+      if (!booking.paymentLink) {
+        return res.json({
+          success: false,
+          message: "Stripe payment link is unavailable",
+        });
+      }
 
-    // Existing Stripe session must still exist
-    if (!booking.paymentLink) {
+      if (booking.paymentStatus === "failed") {
+        booking.paymentStatus = "pending";
+        await booking.save();
+      }
+
       return res.json({
-        success: false,
-        message: "Payment link is unavailable",
+        success: true,
+        paymentMethod: "stripe",
+        url: booking.paymentLink,
+        reservationExpiresAt: booking.reservationExpiresAt,
+        message: "Stripe payment retry available",
       });
     }
 
-    // A retry attempt becomes pending again
-    if (booking.paymentStatus === "failed") {
+    // Retry eSewa payment
+    if (booking.paymentMethod === "esewa") {
+      const transactionUuid = `${booking._id.toString()}-${Date.now()}`;
+
+      const totalAmount = String(booking.paymentAmount);
+
+      const signature = generateEsewaSignature(totalAmount, transactionUuid);
+
+      booking.paymentReference = transactionUuid;
+
       booking.paymentStatus = "pending";
 
       await booking.save();
+
+      const esewaPaymentData = {
+        amount: totalAmount,
+        tax_amount: "0",
+        total_amount: totalAmount,
+
+        transaction_uuid: transactionUuid,
+
+        product_code: process.env.ESEWA_PRODUCT_CODE,
+
+        product_service_charge: "0",
+        product_delivery_charge: "0",
+
+        success_url: `${req.headers.origin}/esewa-success`,
+
+        failure_url: `${req.headers.origin}/my-bookings`,
+
+        signed_field_names: "total_amount,transaction_uuid,product_code",
+
+        signature,
+      };
+
+      return res.json({
+        success: true,
+        paymentMethod: "esewa",
+
+        paymentUrl: process.env.ESEWA_PAYMENT_URL,
+
+        paymentData: esewaPaymentData,
+
+        reservationExpiresAt: booking.reservationExpiresAt,
+
+        message: "eSewa payment retry available",
+      });
     }
 
+    // Safety fallback
     return res.json({
-      success: true,
-      url: booking.paymentLink,
-      reservationExpiresAt: booking.reservationExpiresAt,
-      message: "Payment retry available",
+      success: false,
+      message: "Unsupported payment method",
     });
   } catch (error) {
     console.log(error.message);

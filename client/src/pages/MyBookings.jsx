@@ -74,6 +74,26 @@ const MyBookings = () => {
     return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
   };
 
+  const submitEsewaForm = (paymentUrl, paymentData) => {
+    const form = document.createElement("form");
+
+    form.method = "POST";
+    form.action = paymentUrl;
+
+    Object.entries(paymentData).forEach(([key, value]) => {
+      const input = document.createElement("input");
+
+      input.type = "hidden";
+      input.name = key;
+      input.value = value;
+
+      form.appendChild(input);
+    });
+
+    document.body.appendChild(form);
+    form.submit();
+  };
+
   // STEP 9 ADDITION:
   // retry payment for pending or failed booking
   const handleRetryPayment = async (bookingId) => {
@@ -89,13 +109,19 @@ const MyBookings = () => {
       );
 
       if (data.success) {
-        // redirect user to Stripe payment page
-        window.location.href = data.url;
+        if (data.paymentMethod === "stripe") {
+          window.location.href = data.url;
+          return;
+        }
+
+        if (data.paymentMethod === "esewa") {
+          submitEsewaForm(data.paymentUrl, data.paymentData);
+          return;
+        }
+
+        toast.error("Unsupported payment method");
       } else {
         toast.error(data.message);
-
-        // refresh booking status
-        getMyBookings();
       }
     } catch (error) {
       console.log(error);
