@@ -18,6 +18,7 @@ import { useAppContext } from "./context/AppContext";
 import { SignIn } from "@clerk/react";
 import Loading from "./components/Loading";
 import TicketVerify from "./pages/TicketVerify";
+import EsewaSuccess from "./pages/EsewaSuccess";
 
 const AdminProtectedRoute = () => {
   const { user, isAdmin, isLoaded, adminChecked } = useAppContext();
@@ -63,6 +64,7 @@ const App = () => {
         <Route path="/my-bookings" element={<MyBookings />} />
         <Route path="/loading/:nextUrl" element={<Loading />} />
         <Route path="/verify-ticket/:ticketCode" element={<TicketVerify />} />
+        <Route path="/esewa-success" element={<EsewaSuccess />} />
 
         <Route
           path="/favourite"

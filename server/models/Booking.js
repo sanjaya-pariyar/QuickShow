@@ -22,6 +22,9 @@ const bookingSchema = new mongoose.Schema(
     paymentCurrency: {
       type: String,
     },
+    paymentReference: {
+      type: String,
+    },
     bookedSeats: { type: Array, required: true },
     isPaid: { type: Boolean, default: false },
     paymentStatus: {

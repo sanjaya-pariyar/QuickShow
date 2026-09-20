@@ -20,6 +20,213 @@ const generateTicketCode = async () => {
   return ticketCode;
 };
 
+const generateEsewaSignature = (totalAmount, transactionUuid) => {
+  const productCode = process.env.ESEWA_PRODUCT_CODE;
+
+  const secretKey = process.env.ESEWA_SECRET_KEY;
+
+  const message =
+    `total_amount=${totalAmount},` +
+    `transaction_uuid=${transactionUuid},` +
+    `product_code=${productCode}`;
+
+  return crypto
+    .createHmac("sha256", secretKey)
+    .update(message)
+    .digest("base64");
+};
+
+const verifyEsewaResponseSignature = (responseData) => {
+  try {
+    const signedFields = responseData.signed_field_names?.split(",");
+
+    if (!signedFields || !responseData.signature) {
+      return false;
+    }
+
+    const message = signedFields
+      .map((field) => `${field}=${responseData[field]}`)
+      .join(",");
+
+    const expectedSignature = crypto
+      .createHmac("sha256", process.env.ESEWA_SECRET_KEY)
+      .update(message)
+      .digest("base64");
+
+    const expectedBuffer = Buffer.from(expectedSignature);
+
+    const receivedBuffer = Buffer.from(responseData.signature);
+
+    if (expectedBuffer.length !== receivedBuffer.length) {
+      return false;
+    }
+
+    return crypto.timingSafeEqual(expectedBuffer, receivedBuffer);
+  } catch (error) {
+    console.log("eSewa signature verification error:", error.message);
+
+    return false;
+  }
+};
+export const verifyEsewaPayment = async (req, res) => {
+  try {
+    const { data } = req.body;
+
+    if (!data) {
+      return res.json({
+        success: false,
+        message: "eSewa payment data is required",
+      });
+    }
+
+    // Decode Base64 response from eSewa
+    let responseData;
+
+    try {
+      const decodedString = Buffer.from(data, "base64").toString("utf8");
+
+      responseData = JSON.parse(decodedString);
+    } catch (error) {
+      return res.json({
+        success: false,
+        message: "Invalid eSewa payment response",
+      });
+    }
+
+    // Verify response signature
+    const isSignatureValid = verifyEsewaResponseSignature(responseData);
+
+    if (!isSignatureValid) {
+      return res.json({
+        success: false,
+        message: "Invalid eSewa payment signature",
+      });
+    }
+
+    const { status, total_amount, transaction_uuid, product_code } =
+      responseData;
+
+    // eSewa response itself must report COMPLETE
+    if (status !== "COMPLETE") {
+      return res.json({
+        success: false,
+        message: `eSewa payment status: ${status}`,
+      });
+    }
+
+    // Verify merchant/product code
+    if (product_code !== process.env.ESEWA_PRODUCT_CODE) {
+      return res.json({
+        success: false,
+        message: "Invalid eSewa product code",
+      });
+    }
+
+    // Find QuickShow booking
+    const booking = await Booking.findOne({
+      paymentReference: transaction_uuid,
+    });
+
+    if (!booking) {
+      return res.json({
+        success: false,
+        message: "Booking not found",
+      });
+    }
+
+    // Must actually be an eSewa booking
+    if (booking.paymentMethod !== "esewa") {
+      return res.json({
+        success: false,
+        message: "Invalid payment method",
+      });
+    }
+
+    // Amount must match our booking
+    if (Number(total_amount) !== Number(booking.paymentAmount)) {
+      return res.json({
+        success: false,
+        message: "Payment amount does not match booking amount",
+      });
+    }
+
+    // Avoid processing the same payment twice
+    if (booking.isPaid || booking.paymentStatus === "paid") {
+      return res.json({
+        success: true,
+        message: "Payment already verified",
+        bookingId: booking._id,
+      });
+    }
+
+    // Verify transaction directly with eSewa
+    const statusUrl = new URL(process.env.ESEWA_STATUS_URL);
+
+    statusUrl.searchParams.set("product_code", process.env.ESEWA_PRODUCT_CODE);
+
+    statusUrl.searchParams.set("total_amount", String(booking.paymentAmount));
+
+    statusUrl.searchParams.set("transaction_uuid", transaction_uuid);
+
+    const statusResponse = await fetch(statusUrl.toString());
+
+    if (!statusResponse.ok) {
+      throw new Error("Unable to verify transaction with eSewa");
+    }
+
+    const verificationData = await statusResponse.json();
+
+    if (verificationData.status !== "COMPLETE") {
+      return res.json({
+        success: false,
+        message: "eSewa transaction could not be verified",
+      });
+    }
+
+    // Extra amount verification if returned by eSewa
+    const verifiedAmount =
+      verificationData.total_amount ?? verificationData.totalAmount;
+
+    if (
+      verifiedAmount !== undefined &&
+      Number(verifiedAmount) !== Number(booking.paymentAmount)
+    ) {
+      return res.json({
+        success: false,
+        message: "Verified eSewa amount does not match booking amount",
+      });
+    }
+
+    // Payment is now trusted
+    booking.isPaid = true;
+    booking.paymentStatus = "paid";
+    booking.paymentLink = "";
+
+    await booking.save();
+
+    // Use same post-payment workflow as Stripe
+    await inngest.send({
+      name: "app/show.booked",
+      data: {
+        bookingId: booking._id.toString(),
+      },
+    });
+
+    return res.json({
+      success: true,
+      message: "eSewa payment verified successfully",
+      bookingId: booking._id,
+    });
+  } catch (error) {
+    console.log("eSewa verification error:", error.message);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
 const checkSeatsAvailability = async (showId, selectedSeats) => {
   try {
     const showData = await Show.findById(showId);
@@ -192,6 +399,37 @@ export const createBooking = async (req, res) => {
     }
     // eSewa payment will be implemented next
     if (paymentMethod === "esewa") {
+      const transactionUuid = `${booking._id.toString()}-${Date.now()}`;
+
+      const totalAmount = String(booking.amount);
+
+      const signature = generateEsewaSignature(totalAmount, transactionUuid);
+
+      booking.paymentReference = transactionUuid;
+
+      await booking.save();
+
+      const esewaPaymentData = {
+        amount: totalAmount,
+        tax_amount: "0",
+        total_amount: totalAmount,
+
+        transaction_uuid: transactionUuid,
+
+        product_code: process.env.ESEWA_PRODUCT_CODE,
+
+        product_service_charge: "0",
+        product_delivery_charge: "0",
+
+        success_url: `${origin}/esewa-success`,
+
+        failure_url: `${origin}/my-bookings`,
+
+        signed_field_names: "total_amount,transaction_uuid,product_code",
+
+        signature,
+      };
+
       await inngest.send({
         name: "app/checkpayment",
         data: {
@@ -201,9 +439,13 @@ export const createBooking = async (req, res) => {
 
       return res.json({
         success: true,
+
         paymentMethod: "esewa",
-        message:
-          "Booking created. eSewa payment initialization will be added next.",
+
+        paymentUrl: process.env.ESEWA_PAYMENT_URL,
+
+        paymentData: esewaPaymentData,
+
         booking,
       });
     }
