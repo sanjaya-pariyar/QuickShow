@@ -127,55 +127,68 @@ export const createBooking = async (req, res) => {
     // Stripe payment initialize can be added here later
     // Handle Stripe payment
     if (paymentMethod === "stripe") {
-      const stripeInstance = new stripe(process.env.STRIPE_SECRET_KEY);
+      try {
+        const stripeInstance = new stripe(process.env.STRIPE_SECRET_KEY);
 
-      const line_items = [
-        {
-          price_data: {
-            currency: "npr",
-            product_data: {
-              name: showData.movie.title,
+        const line_items = [
+          {
+            price_data: {
+              currency: "npr",
+              product_data: {
+                name: showData.movie.title,
+              },
+              unit_amount: Math.round(booking.amount * 100),
             },
-            unit_amount: Math.round(booking.amount * 100),
+            quantity: 1,
           },
-          quantity: 1,
-        },
-      ];
+        ];
 
-      const session = await stripeInstance.checkout.sessions.create({
-        success_url: `${origin}/loading/my-bookings`,
+        const session = await stripeInstance.checkout.sessions.create({
+          success_url: `${origin}/loading/my-bookings`,
 
-        cancel_url: `${origin}/my-bookings`,
+          cancel_url: `${origin}/my-bookings`,
 
-        line_items,
-        mode: "payment",
+          line_items,
+          mode: "payment",
 
-        metadata: {
-          bookingId: booking._id.toString(),
+          metadata: {
+            bookingId: booking._id.toString(),
+            ticketCode: booking.ticketCode,
+          },
 
-          ticketCode: booking.ticketCode,
-        },
+          expires_at: Math.floor(reservationExpiresAt.getTime() / 1000),
+        });
 
-        expires_at: Math.floor(reservationExpiresAt.getTime() / 1000),
-      });
+        booking.paymentLink = session.url;
+        await booking.save();
 
-      booking.paymentLink = session.url;
+        await inngest.send({
+          name: "app/checkpayment",
+          data: {
+            bookingId: booking._id.toString(),
+          },
+        });
 
-      await booking.save();
+        return res.json({
+          success: true,
+          paymentMethod: "stripe",
+          url: session.url,
+          booking,
+        });
+      } catch (paymentError) {
+        // Release reserved seats
+        selectedSeats.forEach((seat) => {
+          delete showData.occupiedSeats[seat];
+        });
 
-      await inngest.send({
-        name: "app/checkpayment",
-        data: {
-          bookingId: booking._id.toString(),
-        },
-      });
+        showData.markModified("occupiedSeats");
+        await showData.save();
 
-      return res.json({
-        success: true,
-        paymentMethod: "stripe",
-        url: session.url,
-        booking,
-      });
+        // Remove failed booking
+        await Booking.findByIdAndDelete(booking._id);
+
+        throw paymentError;
+      }
     }
     // eSewa payment will be implemented next
     if (paymentMethod === "esewa") {
