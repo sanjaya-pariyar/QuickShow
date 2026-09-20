@@ -5,74 +5,268 @@ import { useAppContext } from "../context/AppContext";
 import toast from "react-hot-toast";
 
 const CollaborativeRecommendedMovies = () => {
-  const { axios, getToken, user, favoriteMovies } = useAppContext();
+  const {
+    axios,
+    getToken,
+    user,
+  } = useAppContext();
 
-  const [recommendedMovies, setRecommendedMovies] = useState([]);
-  const [hasFetched, setHasFetched] = useState(false);
+  const [
+    recommendedMovies,
+    setRecommendedMovies,
+  ] = useState([]);
 
-  const fetchCollaborativeRecommendations = async () => {
-  if (isFetching.current) return;
+  const [
+    hasFetched,
+    setHasFetched,
+  ] = useState(false);
 
-  isFetching.current = true;
+  const [
+    debugMessage,
+    setDebugMessage,
+  ] = useState("Waiting for user...");
 
-  console.log("Collaborative component loaded");
 
-  try {
-    if (!user) return;
+  console.log(
+    "Collaborative component rendered"
+  );
 
-    setHasFetched(false);
+  console.log(
+    "Current frontend user:",
+    user?.id
+  );
 
-    const { data } = await axios.get(
-      "/api/user/recommendations/collaborative",
-      {
-        headers: {
-          Authorization: `Bearer ${await getToken()}`,
-        },
-      }
-    );
+  console.log(
+    "Axios base URL:",
+    axios?.defaults?.baseURL
+  );
 
-    console.log(
-      "Collaborative response:",
-      data
-    );
 
-    if (data.success) {
-      setRecommendedMovies(
-        data.recommendations || []
+  const fetchCollaborativeRecommendations =
+    async () => {
+
+      console.log(
+        "fetchCollaborativeRecommendations entered"
       );
-    } else {
-      setRecommendedMovies([]);
-      toast.error(data.message);
-    }
 
-  } catch (error) {
-    console.log(error);
+      if (!user?.id) {
+        console.log(
+          "Fetch stopped: user is not available"
+        );
 
-    setRecommendedMovies([]);
+        setDebugMessage(
+          "User is not available"
+        );
 
-    toast.error(
-      "Failed to fetch collaborative recommendations"
-    );
+        return;
+      }
 
-  } finally {
-    setHasFetched(true);
+      try {
+        setHasFetched(false);
 
-    // Release request lock
-    isFetching.current = false;
-  }
-};
+        setDebugMessage(
+          "Sending collaborative recommendation request..."
+        );
+
+        console.log(
+          "Getting Clerk token..."
+        );
+
+        const token = await getToken();
+
+        console.log(
+          "Token available:",
+          !!token
+        );
+
+        console.log(
+          "Sending request to:"
+        );
+
+        console.log(
+          "/api/user/recommendations/collaborative"
+        );
+
+
+        const { data } = await axios.get(
+          "/api/user/recommendations/collaborative",
+          {
+            headers: {
+              Authorization:
+                `Bearer ${token}`,
+            },
+          }
+        );
+
+
+        console.log(
+          "Collaborative API response:",
+          data
+        );
+
+
+        if (data.success) {
+
+          const recommendations =
+            data.recommendations || [];
+
+          console.log(
+            "Number of collaborative recommendations:",
+            recommendations.length
+          );
+
+          console.log(
+            "Collaborative movies:",
+            recommendations
+          );
+
+          setRecommendedMovies(
+            recommendations
+          );
+
+
+          if (
+            recommendations.length === 0
+          ) {
+            setDebugMessage(
+              data.message ||
+                "No collaborative recommendations found."
+            );
+          } else {
+            setDebugMessage(
+              `${recommendations.length} collaborative recommendation(s) received.`
+            );
+          }
+
+        } else {
+
+          console.log(
+            "Backend returned success false:",
+            data.message
+          );
+
+          setRecommendedMovies([]);
+
+          setDebugMessage(
+            data.message ||
+              "Backend returned an unsuccessful response."
+          );
+
+          toast.error(
+            data.message ||
+              "Collaborative recommendation failed"
+          );
+        }
+
+      } catch (error) {
+
+        console.error(
+          "Collaborative recommendation request failed:"
+        );
+
+        console.error(error);
+
+        console.log(
+          "Error message:",
+          error.message
+        );
+
+        console.log(
+          "Error status:",
+          error.response?.status
+        );
+
+        console.log(
+          "Error response:",
+          error.response?.data
+        );
+
+        setRecommendedMovies([]);
+
+        setDebugMessage(
+          error.response?.data?.message ||
+            error.message ||
+            "Collaborative API request failed."
+        );
+
+        toast.error(
+          "Failed to fetch collaborative recommendations"
+        );
+
+      } finally {
+
+        console.log(
+          "Collaborative fetch completed"
+        );
+
+        setHasFetched(true);
+      }
+    };
 
 
   useEffect(() => {
-    fetchCollaborativeRecommendations();
+
+    console.log(
+      "Collaborative useEffect triggered"
+    );
+
+    console.log(
+      "useEffect user ID:",
+      user?.id
+    );
+
+
+    if (user?.id) {
+
+      console.log(
+        "User available - calling collaborative API"
+      );
+
+      fetchCollaborativeRecommendations();
+
+    } else {
+
+      console.log(
+        "User not ready - API not called"
+      );
+    }
+
   }, [user?.id]);
 
 
-  if (!user) return null;
+  if (!user) {
+    return null;
+  }
 
-  if (!hasFetched) return null;
 
-  if (recommendedMovies.length === 0) return null;
+  if (!hasFetched) {
+    return (
+      <div className="px-6 md:px-16 lg:px-24 xl:px-44 py-10">
+
+        <p className="text-gray-400 text-sm">
+          Loading collaborative recommendations...
+        </p>
+
+      </div>
+    );
+  }
+
+
+  if (recommendedMovies.length === 0) {
+    return (
+      <div className="px-6 md:px-16 lg:px-24 xl:px-44 py-10">
+
+        <p className="text-gray-300 font-medium">
+          Collaborative Recommendation Debug
+        </p>
+
+        <p className="text-gray-500 text-sm mt-2">
+          {debugMessage}
+        </p>
+
+      </div>
+    );
+  }
 
 
   return (
@@ -80,7 +274,10 @@ const CollaborativeRecommendedMovies = () => {
 
       <div className="relative flex items-center justify-between pt-20 pb-10">
 
-        <BlurCircle top="0" right="-80px" />
+        <BlurCircle
+          top="0"
+          right="-80px"
+        />
 
         <div>
 
@@ -99,12 +296,14 @@ const CollaborativeRecommendedMovies = () => {
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 mt-8">
 
-        {recommendedMovies.map((movie) => (
-          <MovieCard
-            key={movie._id}
-            movie={movie}
-          />
-        ))}
+        {recommendedMovies.map(
+          (movie) => (
+            <MovieCard
+              key={movie._id}
+              movie={movie}
+            />
+          )
+        )}
 
       </div>
 

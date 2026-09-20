@@ -14,7 +14,7 @@ export const stripeWebhooks = async (request, response) => {
     event = stripeInstance.webhooks.constructEvent(
       request.body,
       sig,
-      process.env.STRIPE_WEBHOOK_SECRET
+      process.env.STRIPE_WEBHOOK_SECRET,
     );
 
     console.log("Stripe event type:", event.type);
@@ -51,6 +51,7 @@ export const stripeWebhooks = async (request, response) => {
 
         await Booking.findByIdAndUpdate(bookingId, {
           isPaid: true,
+          paymentStatus: "paid",
           paymentLink: "",
         });
 
@@ -62,6 +63,39 @@ export const stripeWebhooks = async (request, response) => {
         });
 
         console.log("Inngest event sent: app/show.booked", bookingId);
+
+        break;
+      }
+
+      case "payment_intent.payment_failed": {
+        console.log("Payment intent failed");
+
+        const paymentIntent = event.data.object;
+
+        const sessionList = await stripeInstance.checkout.sessions.list({
+          payment_intent: paymentIntent.id,
+        });
+
+        const session = sessionList.data[0];
+
+        if (!session) {
+          console.log("Stripe checkout session not found for failed payment");
+          break;
+        }
+
+        const bookingId = session.metadata?.bookingId;
+
+        if (!bookingId) {
+          console.log("Booking ID not found in Stripe session metadata");
+          break;
+        }
+
+        await Booking.findByIdAndUpdate(bookingId, {
+          isPaid: false,
+          paymentStatus: "failed",
+        });
+
+        console.log("Booking marked as failed:", bookingId);
 
         break;
       }

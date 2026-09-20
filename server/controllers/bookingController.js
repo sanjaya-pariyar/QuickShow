@@ -2,7 +2,7 @@
 
 import Show from "../models/Show.js";
 import Booking from "../models/Booking.js";
-import stripe from 'stripe';
+import stripe from "stripe";
 import { inngest } from "../inngest/index.js";
 import crypto from "crypto";
 
@@ -85,9 +85,13 @@ export const createBooking = async (req, res) => {
       show: showId,
       amount: showData.showPrice * selectedSeats.length,
       bookedSeats: selectedSeats,
+
       isPaid: false,
 
-      //save ticket code for QR verification
+      // Initial payment state
+      paymentStatus: "pending",
+
+      // Save ticket code for QR verification
       ticketCode: ticketCode,
       isTicketUsed: false,
     });
@@ -104,42 +108,43 @@ export const createBooking = async (req, res) => {
     const stripeInstance = new stripe(process.env.STRIPE_SECRET_KEY);
 
     //creating line items from stripe
-    const line_items = [{
-      price_data: {
-        currency: 'usd',
-        product_data:{
-          name: showData.movie.title
+    const line_items = [
+      {
+        price_data: {
+          currency: "usd",
+          product_data: {
+            name: showData.movie.title,
+          },
+          unit_amount: Math.floor(booking.amount) * 100,
         },
-        unit_amount: Math.floor(booking.amount) * 100
+        quantity: 1,
       },
-      quantity: 1
-    }]
+    ];
 
     const session = await stripeInstance.checkout.sessions.create({
       success_url: `${origin}/loading/my-bookings`,
       cancel_url: `${origin}/my-bookings`,
       line_items: line_items,
-      mode: 'payment',
+      mode: "payment",
       metadata: {
         bookingId: booking._id.toString(),
 
         // store ticket code in Stripe metadata also
         ticketCode: booking.ticketCode,
       },
-      expires_at: Math.floor(Date.now() / 1000) + 30 * 60 //Expires in 30 minutes
-    })
+      expires_at: Math.floor(Date.now() / 1000) + 30 * 60, //Expires in 30 minutes
+    });
 
-
-    booking.paymentLink = session.url
-    await booking.save()
+    booking.paymentLink = session.url;
+    await booking.save();
 
     //run inngest scheduler function to check payment after 10 minutes
     await inngest.send({
       name: "app/checkpayment",
       data: {
-        bookingId: booking._id.toString()
-      }
-    })
+        bookingId: booking._id.toString(),
+      },
+    });
 
     res.json({
       success: true,

@@ -60,48 +60,91 @@ const syncUserUpdation = inngest.createFunction(
   },
 );
 
-//inngest function to cancel bookings and release seats of show after 10 minutes of bookinng created if payment is not made
 
-const releaseSeatsAndDeleteBooking = inngest.createFunction(
-  {
-    id: "release-seats-delete-booking",
-    triggers: { event: "app/checkpayment" },
-  },
-  async ({ event, step }) => {
-    const tenMinutesLater = new Date(Date.now() + 10 * 60 * 1000);
+// Inngest function to expire unpaid bookings and release reserved seats after 30 minutes
 
-    await step.sleepUntil("wait-for-10-minutes", tenMinutesLater);
+const releaseSeatsAndDeleteBooking =
+  inngest.createFunction(
+    {
+      id: "release-seats-delete-booking",
+      triggers: {
+        event: "app/checkpayment",
+      },
+    },
 
-    await step.run("check-payment-status", async () => {
-      const bookingId = event.data.bookingId;
+    async ({ event, step }) => {
 
-      const booking = await Booking.findById(bookingId);
+      const thirtyMinutesLater = new Date(Date.now() + 30 * 60 * 1000);
+      await step.sleepUntil(
+        "wait-for-30-minutes",
+        thirtyMinutesLater
+      );
 
-      if (!booking) {
-        return;
-      }
+      await step.run(
+        "check-payment-status",
+        async () => {
 
-      // If payment is not made, release seats and delete booking
-      if (!booking.isPaid) {
-        const show = await Show.findById(booking.show);
+          const bookingId =
+            event.data.bookingId;
 
-        if (!show) {
-          await Booking.findByIdAndDelete(booking._id);
-          return;
+          const booking =
+            await Booking.findById(
+              bookingId
+            );
+
+          if (!booking) {
+            return;
+          }
+
+          // Do nothing if payment succeeded
+          if (
+            booking.isPaid ||
+            booking.paymentStatus === "paid"
+          ) {
+            return;
+          }
+
+          // Find the related show
+          const show =
+            await Show.findById(
+              booking.show
+            );
+
+          // Release reserved seats
+          if (show) {
+
+            booking.bookedSeats.forEach(
+              (seat) => {
+                delete show
+                  .occupiedSeats[seat];
+              }
+            );
+
+            show.markModified(
+              "occupiedSeats"
+            );
+
+            await show.save();
+          }
+
+          // Keep booking record,
+          // but mark it as expired
+          booking.isPaid = false;
+
+          booking.paymentStatus = "expired";
+
+          booking.paymentLink = "";
+
+          await booking.save();
+
+          console.log(
+            "Booking expired and seats released:",
+            bookingId
+          );
         }
-
-        booking.bookedSeats.forEach((seat) => {
-          delete show.occupiedSeats[seat];
-        });
-
-        show.markModified("occupiedSeats");
-        await show.save();
-
-        await Booking.findByIdAndDelete(booking._id);
-      }
-    });
-  },
-);
+      );
+    }
+  );
 
 //inngest function to send email when user books a show
 const sendBookingConfirmationEmail = inngest.createFunction(
