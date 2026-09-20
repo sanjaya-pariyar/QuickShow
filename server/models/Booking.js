@@ -5,6 +5,23 @@ const bookingSchema = new mongoose.Schema(
     user: { type: String, required: true, ref: "User" },
     show: { type: String, required: true, ref: "Show" },
     amount: { type: Number, required: true },
+    currency: {
+      type: String,
+      default: "NPR",
+    },
+
+    paymentMethod: {
+      type: String,
+      enum: ["stripe", "esewa"],
+    },
+
+    paymentAmount: {
+      type: Number,
+    },
+
+    paymentCurrency: {
+      type: String,
+    },
     bookedSeats: { type: Array, required: true },
     isPaid: { type: Boolean, default: false },
     paymentStatus: {

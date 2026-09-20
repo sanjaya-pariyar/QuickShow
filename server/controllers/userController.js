@@ -494,3 +494,38 @@ export const getCollaborativeRecommendations = async (req, res) => {
   }
   
 };
+
+
+export const checkAdminRole = async (req, res) => {
+  try {
+    const { userId } = req.auth();
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        isAdmin: false,
+        message: "Authentication required",
+      });
+    }
+
+    const currentUser =
+      await clerkClient.users.getUser(userId);
+
+    const role =
+      currentUser.privateMetadata?.role;
+
+    return res.json({
+      success: true,
+      isAdmin: role === "admin",
+    });
+
+  } catch (error) {
+    console.log(error.message);
+
+    return res.status(500).json({
+      success: false,
+      isAdmin: false,
+      message: error.message,
+    });
+  }
+};

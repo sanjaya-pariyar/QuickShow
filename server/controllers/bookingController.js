@@ -5,6 +5,7 @@ import Booking from "../models/Booking.js";
 import stripe from "stripe";
 import { inngest } from "../inngest/index.js";
 import crypto from "crypto";
+import { clerkClient } from "@clerk/express";
 
 //  function to generate unique ticket code
 const generateTicketCode = async () => {
@@ -39,8 +40,15 @@ const checkSeatsAvailability = async (showId, selectedSeats) => {
 export const createBooking = async (req, res) => {
   try {
     const { userId } = req.auth();
-    const { showId, selectedSeats } = req.body;
+    const { showId, selectedSeats, paymentMethod = "stripe" } = req.body;
     const { origin } = req.headers;
+
+    if (!["stripe", "esewa"].includes(paymentMethod)) {
+      return res.json({
+        success: false,
+        message: "Invalid payment method",
+      });
+    }
 
     if (!userId) {
       return res.json({
@@ -79,11 +87,21 @@ export const createBooking = async (req, res) => {
     //  generate unique ticket code for this booking
     const ticketCode = await generateTicketCode();
 
+    const amount = showData.showPrice * selectedSeats.length;
+
+    const reservationExpiresAt = new Date(Date.now() + 30 * 60 * 1000);
     // create a new booking
     const booking = await Booking.create({
       user: userId,
       show: showId,
-      amount: showData.showPrice * selectedSeats.length,
+
+      amount,
+      currency: "NPR",
+
+      paymentMethod,
+      paymentAmount: amount,
+      paymentCurrency: "NPR",
+
       bookedSeats: selectedSeats,
 
       isPaid: false,
@@ -91,7 +109,7 @@ export const createBooking = async (req, res) => {
       // Initial payment state
       paymentStatus: "pending",
 
-      reservationExpiresAt: new Date(Date.now() + 30 * 60 * 1000),
+      reservationExpiresAt,
 
       // Save ticket code for QR verification
       ticketCode: ticketCode,
@@ -107,52 +125,75 @@ export const createBooking = async (req, res) => {
     await showData.save();
 
     // Stripe payment initialize can be added here later
-    const stripeInstance = new stripe(process.env.STRIPE_SECRET_KEY);
+    // Handle Stripe payment
+    if (paymentMethod === "stripe") {
+      const stripeInstance = new stripe(process.env.STRIPE_SECRET_KEY);
 
-    //creating line items from stripe
-    const line_items = [
-      {
-        price_data: {
-          currency: "usd",
-          product_data: {
-            name: showData.movie.title,
+      const line_items = [
+        {
+          price_data: {
+            currency: "npr",
+            product_data: {
+              name: showData.movie.title,
+            },
+            unit_amount: Math.round(booking.amount * 100),
           },
-          unit_amount: Math.floor(booking.amount) * 100,
+          quantity: 1,
         },
-        quantity: 1,
-      },
-    ];
+      ];
 
-    const session = await stripeInstance.checkout.sessions.create({
-      success_url: `${origin}/loading/my-bookings`,
-      cancel_url: `${origin}/my-bookings`,
-      line_items: line_items,
-      mode: "payment",
-      metadata: {
-        bookingId: booking._id.toString(),
+      const session = await stripeInstance.checkout.sessions.create({
+        success_url: `${origin}/loading/my-bookings`,
 
-        // store ticket code in Stripe metadata also
-        ticketCode: booking.ticketCode,
-      },
-      expires_at: Math.floor(Date.now() / 1000) + 30 * 60, //Expires in 30 minutes
-    });
+        cancel_url: `${origin}/my-bookings`,
 
-    booking.paymentLink = session.url;
-    await booking.save();
+        line_items,
+        mode: "payment",
 
-    //run inngest scheduler function to check payment after 10 minutes
-    await inngest.send({
-      name: "app/checkpayment",
-      data: {
-        bookingId: booking._id.toString(),
-      },
-    });
+        metadata: {
+          bookingId: booking._id.toString(),
 
-    res.json({
-      success: true,
-      url: session.url,
-      booking,
-    });
+          ticketCode: booking.ticketCode,
+        },
+
+        expires_at: Math.floor(reservationExpiresAt.getTime() / 1000),
+      });
+
+      booking.paymentLink = session.url;
+
+      await booking.save();
+
+      await inngest.send({
+        name: "app/checkpayment",
+        data: {
+          bookingId: booking._id.toString(),
+        },
+      });
+
+      return res.json({
+        success: true,
+        paymentMethod: "stripe",
+        url: session.url,
+        booking,
+      });
+    }
+    // eSewa payment will be implemented next
+    if (paymentMethod === "esewa") {
+      await inngest.send({
+        name: "app/checkpayment",
+        data: {
+          bookingId: booking._id.toString(),
+        },
+      });
+
+      return res.json({
+        success: true,
+        paymentMethod: "esewa",
+        message:
+          "Booking created. eSewa payment initialization will be added next.",
+        booking,
+      });
+    }
   } catch (error) {
     console.log(error.message);
 
@@ -235,6 +276,21 @@ export const verifyTicket = async (req, res) => {
       });
     }
 
+    // Check if ticket has already been used
+    if (booking.isTicketUsed) {
+      return res.json({
+        success: true,
+        valid: false,
+        used: true,
+        message: "This ticket has already been used.",
+        booking: {
+          ticketCode: booking.ticketCode,
+          isPaid: booking.isPaid,
+          isTicketUsed: booking.isTicketUsed,
+        },
+      });
+    }
+
     if (!booking.show || !booking.show.movie) {
       return res.json({
         success: false,
@@ -281,11 +337,116 @@ export const verifyTicket = async (req, res) => {
   }
 };
 
+export const validateTicket = async (req, res) => {
+  try {
+    const { ticketCode } = req.params;
+    const { userId } = req.auth();
 
-export const retryPayment = async (
-  req,
-  res
-) => {
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        valid: false,
+        message: "Authentication required",
+      });
+    }
+
+    const currentUser = await clerkClient.users.getUser(userId);
+
+    const role = currentUser.privateMetadata?.role;
+
+    if (role !== "admin") {
+      return res.status(403).json({
+        success: false,
+        valid: false,
+        message: "Only authorised staff can validate tickets",
+      });
+    }
+
+    if (!ticketCode) {
+      return res.json({
+        success: false,
+        valid: false,
+        message: "Ticket code is required",
+      });
+    }
+
+    const booking = await Booking.findOne({
+      ticketCode,
+    })
+      .populate({
+        path: "show",
+        populate: {
+          path: "movie",
+          model: "Movie",
+        },
+      })
+      .populate("user");
+
+    if (!booking) {
+      return res.json({
+        success: false,
+        valid: false,
+        message: "Invalid ticket. Booking not found.",
+      });
+    }
+
+    if (!booking.isPaid || booking.paymentStatus !== "paid") {
+      return res.json({
+        success: true,
+        valid: false,
+        message: "Ticket cannot be validated because payment is not completed.",
+      });
+    }
+
+    if (booking.isTicketUsed) {
+      return res.json({
+        success: true,
+        valid: false,
+        used: true,
+        message: "This ticket has already been used.",
+      });
+    }
+
+    booking.isTicketUsed = true;
+
+    await booking.save();
+
+    return res.json({
+      success: true,
+      valid: true,
+      used: true,
+      message: "Ticket validated successfully. Entry permitted.",
+      booking: {
+        ticketCode: booking.ticketCode,
+        isPaid: booking.isPaid,
+        paymentStatus: booking.paymentStatus,
+        isTicketUsed: booking.isTicketUsed,
+        bookedSeats: booking.bookedSeats,
+        amount: booking.amount,
+        user: {
+          name: booking.user?.name,
+          email: booking.user?.email,
+        },
+        show: {
+          showDateTime: booking.show?.showDateTime,
+          movie: {
+            title: booking.show?.movie?.title,
+          },
+        },
+      },
+    });
+  } catch (error) {
+    console.log(error.message);
+
+    return res.json({
+      success: false,
+      valid: false,
+      message: error.message,
+    });
+  }
+};
+
+export const retryPayment = async (req, res) => {
   try {
     const { userId } = req.auth();
     const { bookingId } = req.params;
@@ -297,8 +458,7 @@ export const retryPayment = async (
       });
     }
 
-    const booking =
-      await Booking.findById(bookingId);
+    const booking = await Booking.findById(bookingId);
 
     if (!booking) {
       return res.json({
@@ -311,20 +471,15 @@ export const retryPayment = async (
     if (booking.user !== userId) {
       return res.json({
         success: false,
-        message:
-          "You are not allowed to access this booking",
+        message: "You are not allowed to access this booking",
       });
     }
 
     // Already completed
-    if (
-      booking.isPaid ||
-      booking.paymentStatus === "paid"
-    ) {
+    if (booking.isPaid || booking.paymentStatus === "paid") {
       return res.json({
         success: false,
-        message:
-          "This booking has already been paid",
+        message: "This booking has already been paid",
       });
     }
 
@@ -332,15 +487,11 @@ export const retryPayment = async (
     if (
       booking.paymentStatus === "expired" ||
       !booking.reservationExpiresAt ||
-      new Date() >=
-        new Date(
-          booking.reservationExpiresAt
-        )
+      new Date() >= new Date(booking.reservationExpiresAt)
     ) {
       return res.json({
         success: false,
-        message:
-          "Reservation has expired. Please select your seats again.",
+        message: "Reservation has expired. Please select your seats again.",
       });
     }
 
@@ -351,8 +502,7 @@ export const retryPayment = async (
     ) {
       return res.json({
         success: false,
-        message:
-          "Payment cannot be retried for this booking",
+        message: "Payment cannot be retried for this booking",
       });
     }
 
@@ -360,15 +510,12 @@ export const retryPayment = async (
     if (!booking.paymentLink) {
       return res.json({
         success: false,
-        message:
-          "Payment link is unavailable",
+        message: "Payment link is unavailable",
       });
     }
 
     // A retry attempt becomes pending again
-    if (
-      booking.paymentStatus === "failed"
-    ) {
+    if (booking.paymentStatus === "failed") {
       booking.paymentStatus = "pending";
 
       await booking.save();
@@ -377,12 +524,9 @@ export const retryPayment = async (
     return res.json({
       success: true,
       url: booking.paymentLink,
-      reservationExpiresAt:
-        booking.reservationExpiresAt,
-      message:
-        "Payment retry available",
+      reservationExpiresAt: booking.reservationExpiresAt,
+      message: "Payment retry available",
     });
-
   } catch (error) {
     console.log(error.message);
 
