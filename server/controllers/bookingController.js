@@ -218,7 +218,7 @@ export const verifyEsewaPayment = async (req, res) => {
       bookingId: booking._id,
     });
   } catch (error) {
-    console.log("eSewa verification error:", error.message);
+    console.log("eSewa verification error:", error);
 
     return res.status(500).json({
       success: false,
