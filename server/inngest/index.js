@@ -173,7 +173,7 @@ const sendBookingConfirmationEmail = inngest.createFunction(
         throw new Error("User email not found");
       }
       // QR CODE ADDITION: create ticket verification link
-      const clientUrl = process.env.CLIENT_URL || "http://localhost:5173";
+      const clientUrl = process.env.CLIENT_URL || "https://quickshow-six-jade.vercel.app";
       const ticketVerifyUrl = `${clientUrl}/verify-ticket/${booking.ticketCode}`;
       await sendEmail({
         to: booking.user.email,
