@@ -4,6 +4,7 @@ import {
   PlusSquareIcon,
   ListIcon,
   ListCollapseIcon,
+  ScanLineIcon,
 } from "lucide-react";
 import { assets } from "../../assets/assets";
 import { NavLink } from "react-router-dom";
@@ -19,7 +20,17 @@ const AdminSidebar = () => {
     { name: "Dashboard", path: "/admin", icon: LayoutDashboardIcon },
     { name: "Add Shows", path: "/admin/add-shows", icon: PlusSquareIcon },
     { name: "List Shows", path: "/admin/list-shows", icon: ListIcon },
-    { name: "List Bookings", path: "/admin/list-bookings", icon: ListCollapseIcon },
+    {
+      name: "List Bookings",
+      path: "/admin/list-bookings",
+      icon: ListCollapseIcon,
+    },
+    {
+      name: "Scan Ticket",
+      path: "/admin/scan-ticket",
+      icon: ScanLineIcon,
+      mobileOnly: true,
+    },
   ];
 
   return (
@@ -44,9 +55,9 @@ const AdminSidebar = () => {
               to={link.path}
               end
               className={({ isActive }) =>
-                `relative flex items-center max-md:justify-center gap-2 w-full py-2.5 md:pl-10 first:mt-6 text-gray-400 ${
-                  isActive ? "bg-primary/15 text-primary group" : ""
-                }`
+                `relative flex items-center max-md:justify-center gap-2 w-full py-2.5 md:pl-10 first:mt-6 text-gray-400
+                  ${link.mobileOnly ? "md:hidden" : ""}
+                  ${isActive ? "bg-primary/15 text-primary group" : ""}`
               }
             >
               {({ isActive }) => (
