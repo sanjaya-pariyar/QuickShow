@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import QRCode from "qrcode";
 import jsPDF from "jspdf";
+import { createPortal } from "react-dom";
 
 const TicketDownload = ({ booking, onClose }) => {
   const [qrCodeUrl, setQrCodeUrl] = useState("");
@@ -153,7 +154,7 @@ const TicketDownload = ({ booking, onClose }) => {
 
   if (!booking) return null;
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-[9999] bg-black/80 overflow-y-auto overflow-x-hidden">
       <div className="min-h-[100dvh] w-full flex items-start sm:items-center justify-center p-3 sm:p-5">
         <div className="w-full max-w-3xl min-w-0 bg-gray-950 border border-primary/30 rounded-xl overflow-hidden">
@@ -328,7 +329,8 @@ const TicketDownload = ({ booking, onClose }) => {
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 };
 

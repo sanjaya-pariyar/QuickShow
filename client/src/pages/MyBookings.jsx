@@ -147,10 +147,10 @@ const MyBookings = () => {
   }, []);
 
   return !isLoading ? (
-    <div className="relative px-6 md:px-16 lg:px-40 pt-30 md:pt-40 min-h-[80vh]">
+    <div className="relative px-4 sm:px-6 md:px-16 lg:px-40 pt-30 md:pt-40 min-h-[80vh] overflow-x-hidden">
       <BlurCircle top="100px" left="100px" />
 
-      <div>
+      <div className="hidden md:block">
         <BlurCircle bottom="0px" left="600px" />
       </div>
 
