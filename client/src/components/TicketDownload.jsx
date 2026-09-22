@@ -14,18 +14,20 @@ const TicketDownload = ({ booking, onClose }) => {
   const frontendUrl = window.location.origin;
   const ticketVerifyUrl = `${frontendUrl}/verify-ticket/${booking?.ticketCode}`;
 
-  const generateQRCode = async () => {
-    try {
-      const qrImage = await QRCode.toDataURL(ticketVerifyUrl, {
-        width: 220,
-        margin: 2,
-      });
+const generateQRCode = async () => {
+  try {
+    console.log("QR verification URL:", ticketVerifyUrl);
 
-      setQrCodeUrl(qrImage);
-    } catch (error) {
-      console.log("QR Code generation error:", error);
-    }
-  };
+    const qrImage = await QRCode.toDataURL(ticketVerifyUrl, {
+      width: 220,
+      margin: 2,
+    });
+
+    setQrCodeUrl(qrImage);
+  } catch (error) {
+    console.log("QR Code generation error:", error);
+  }
+};
 
   const downloadTicket = async () => {
     try {
