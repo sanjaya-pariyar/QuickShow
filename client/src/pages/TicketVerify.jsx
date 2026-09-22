@@ -133,88 +133,131 @@ const TicketVerify = () => {
   const showDateTime = ticketData.show?.showDateTime;
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-primary/5 px-4 py-10">
-      <div className="max-w-2xl w-full bg-gray-900 border border-green-500/30 rounded-xl overflow-hidden">
-        <div className="bg-green-600 text-white text-center py-4">
-          <h1 className="text-2xl font-semibold">Valid Ticket</h1>
-          <p className="text-sm mt-1">This ticket is successfully verified.</p>
+    <div className="min-h-[100dvh] bg-primary/5 px-3 sm:px-4 py-6 sm:py-10 flex items-start md:items-center justify-center overflow-x-hidden">
+      <div className="w-full max-w-2xl bg-gray-900 border border-green-500/30 rounded-xl overflow-hidden">
+        {/* Valid Ticket Header */}
+        <div className="bg-green-600 text-white text-center px-4 py-4">
+          <h1 className="text-xl sm:text-2xl font-semibold">Valid Ticket</h1>
+
+          <p className="text-xs sm:text-sm mt-1">
+            This ticket is successfully verified.
+          </p>
         </div>
 
-        <div className="p-6">
-          <div className="flex flex-col md:flex-row gap-6">
+        {/* Ticket Content */}
+        <div className="p-4 sm:p-6">
+          <div className="flex flex-col md:flex-row gap-5 sm:gap-6">
+            {/* Movie Poster */}
             {movie?.poster_path && (
-              <img
-                src={`https://image.tmdb.org/t/p/w300${movie.poster_path}`}
-                alt={movie.title}
-                className="w-full md:w-40 rounded-lg object-cover"
-              />
+              <div className="flex justify-center md:block shrink-0">
+                <img
+                  src={`https://image.tmdb.org/t/p/w300${movie.poster_path}`}
+                  alt={movie.title}
+                  className="
+                  w-32
+                  sm:w-40
+                  md:w-40
+                  max-h-60
+                  md:max-h-none
+                  rounded-lg
+                  object-cover
+                "
+                />
+              </div>
             )}
 
-            <div className="flex-1 text-gray-300">
-              <h2 className="text-xl font-semibold text-white mb-3">
+            {/* Ticket Information */}
+            <div className="flex-1 min-w-0 text-gray-300">
+              <h2 className="text-xl sm:text-2xl font-semibold text-white mb-4 text-center md:text-left">
                 {movie?.title}
               </h2>
 
-              <p className="mb-2">
-                <span className="font-medium text-gray-100">Ticket Code:</span>{" "}
-                {ticketData.ticketCode}
-              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-3 text-sm">
+                <p className="break-words">
+                  <span className="font-medium text-gray-100">
+                    Ticket Code:
+                  </span>{" "}
+                  {ticketData.ticketCode}
+                </p>
 
-              <p className="mb-2">
-                <span className="font-medium text-gray-100">Seats:</span>{" "}
-                {ticketData.bookedSeats?.join(", ")}
-              </p>
+                <p>
+                  <span className="font-medium text-gray-100">Seats:</span>{" "}
+                  {ticketData.bookedSeats?.join(", ")}
+                </p>
 
-              <p className="mb-2">
-                <span className="font-medium text-gray-100">Amount:</span> $
-                {ticketData.amount}
-              </p>
+                <p>
+                  <span className="font-medium text-gray-100">Amount:</span> $
+                  {ticketData.amount}
+                </p>
 
-              <p className="mb-2">
-                <span className="font-medium text-gray-100">
-                  Payment Status:
-                </span>{" "}
-                {ticketData.isPaid ? "Paid" : "Unpaid"}
-              </p>
+                <p>
+                  <span className="font-medium text-gray-100">
+                    Payment Status:
+                  </span>{" "}
+                  {ticketData.isPaid ? "Paid" : "Unpaid"}
+                </p>
 
-              {showDateTime && (
-                <>
-                  <p className="mb-2">
-                    <span className="font-medium text-gray-100">Date:</span>{" "}
-                    {new Date(showDateTime).toLocaleDateString("en-US", {
-                      timeZone: "Asia/Kolkata",
-                    })}
-                  </p>
+                {showDateTime && (
+                  <>
+                    <p>
+                      <span className="font-medium text-gray-100">Date:</span>{" "}
+                      {new Date(showDateTime).toLocaleDateString("en-US", {
+                        timeZone: "Asia/Kolkata",
+                      })}
+                    </p>
 
-                  <p className="mb-2">
-                    <span className="font-medium text-gray-100">Time:</span>{" "}
-                    {new Date(showDateTime).toLocaleTimeString("en-US", {
-                      timeZone: "Asia/Kolkata",
-                    })}
-                  </p>
-                </>
-              )}
+                    <p>
+                      <span className="font-medium text-gray-100">Time:</span>{" "}
+                      {new Date(showDateTime).toLocaleTimeString("en-US", {
+                        timeZone: "Asia/Kolkata",
+                      })}
+                    </p>
+                  </>
+                )}
 
-              <p className="mb-2">
-                <span className="font-medium text-gray-100">Customer:</span>{" "}
-                {ticketData.user?.name || "N/A"}
-              </p>
+                <p className="break-words">
+                  <span className="font-medium text-gray-100">Customer:</span>{" "}
+                  {ticketData.user?.name || "N/A"}
+                </p>
 
-              <p className="mb-2">
-                <span className="font-medium text-gray-100">Email:</span>{" "}
-                {ticketData.user?.email || "N/A"}
-              </p>
+                <p className="break-all">
+                  <span className="font-medium text-gray-100">Email:</span>{" "}
+                  {ticketData.user?.email || "N/A"}
+                </p>
+              </div>
             </div>
           </div>
 
-          <div className="mt-6 bg-green-500/10 border border-green-500/30 rounded-lg p-4 text-center">
-            <p className="text-green-400 font-medium">{message}</p>
+          {/* Verification Message */}
+          <div className="mt-5 sm:mt-6 bg-green-500/10 border border-green-500/30 rounded-lg p-3 sm:p-4 text-center">
+            <p className="text-green-400 text-sm sm:text-base font-medium">
+              {message}
+            </p>
           </div>
-          <div className="mt-5 text-center">
+        </div>
+
+        {/* Validation Action Section */}
+        <div className="border-t border-gray-800 bg-gray-950 p-4 sm:p-5">
+          <div className="w-full flex flex-col items-center gap-3">
             {/* Staff is not logged in */}
             {!isSignedIn && (
               <SignInButton mode="modal">
-                <button className="bg-primary px-5 py-2 rounded-full text-sm font-medium cursor-pointer">
+                <button
+                  type="button"
+                  className="
+                  w-full
+                  sm:w-auto
+                  bg-primary
+                  hover:bg-primary/80
+                  px-6
+                  py-3
+                  rounded-lg
+                  text-sm
+                  font-medium
+                  cursor-pointer
+                  transition
+                "
+                >
                   Staff Sign In to Validate
                 </button>
               </SignInButton>
@@ -222,7 +265,7 @@ const TicketVerify = () => {
 
             {/* Logged in but not admin */}
             {isSignedIn && !isAdmin && (
-              <p className="text-gray-400 text-sm">
+              <p className="text-gray-400 text-sm text-center px-2">
                 Staff authorization is required to validate this ticket.
               </p>
             )}
@@ -230,17 +273,34 @@ const TicketVerify = () => {
             {/* Admin can validate unused ticket */}
             {isSignedIn && isAdmin && !ticketData.isTicketUsed && (
               <button
+                type="button"
                 onClick={handleValidateTicket}
                 disabled={validating}
-                className="bg-primary px-5 py-2 rounded-full text-sm font-medium cursor-pointer disabled:opacity-50"
+                className="
+                w-full
+                sm:w-auto
+                bg-primary
+                hover:bg-primary/80
+                px-8
+                py-3
+                rounded-lg
+                text-sm
+                font-medium
+                cursor-pointer
+                transition
+                disabled:opacity-50
+                disabled:cursor-not-allowed
+              "
               >
                 {validating ? "Validating..." : "Validate Entry"}
               </button>
             )}
 
-            {/* Ticket has already been validated */}
+            {/* Ticket already used */}
             {ticketData.isTicketUsed && (
-              <p className="text-red-400 font-medium">Ticket Already Used</p>
+              <div className="w-full bg-red-500/10 border border-red-500/30 rounded-lg px-4 py-3 text-center">
+                <p className="text-red-400 font-medium">Ticket Already Used</p>
+              </div>
             )}
           </div>
         </div>
