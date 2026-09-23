@@ -173,8 +173,28 @@ const SeatLayout = () => {
         <BlurCircle top="100px" left="100px" />
         <BlurCircle top="0" right="0" />
         <h1 className="text-2xl font-semibold mb-4">Select Your Seat</h1>
+        {selectedTime && (
+          <div className="mb-4 bg-primary/10 border border-primary/20 rounded-lg px-6 py-3 text-center">
+            <p className="text-sm text-gray-400">Ticket Price</p>
+
+            <p className="text-xl font-semibold text-white">
+              NPR {selectedTime.showPrice}
+            </p>
+          </div>
+        )}
         <img src={assets.screenImage} alt="" />
         <p className="text-gray-400 text-sm mb-6">Screen Side</p>
+        {selectedSeats.length > 0 && selectedTime && (
+          <div className="mb-6 text-center">
+            <p className="text-sm text-gray-400">
+              Selected Seats: {selectedSeats.length}
+            </p>
+
+            <p className="text-lg font-semibold text-primary">
+              Total: NPR {selectedTime.showPrice * selectedSeats.length}
+            </p>
+          </div>
+        )}
         <div className="flex flex-col items-center mt-10 text-xs text-gray-300">
           <div className="grid grid-cols-2 md:grid-cols-1 gap-8 md:gap-2 mb-6">
             {groupRows[0].map((row) => renderSeats(row))}
