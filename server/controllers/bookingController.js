@@ -369,6 +369,10 @@ export const createBooking = async (req, res) => {
     // get the show details
     const showData = await Show.findById(showId).populate("movie");
 
+    console.log("BOOKING DEBUG");
+    console.log("Show ID:", showId);
+    console.log("Movie:", showData.movie.title);
+    console.log("Current DB price:", showData.showPrice);
     if (!showData) {
       return res.json({
         success: false,
