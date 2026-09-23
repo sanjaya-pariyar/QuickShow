@@ -397,6 +397,10 @@ export const createBooking = async (req, res) => {
     const ticketCode = await generateTicketCode();
 
     const amount = showData.showPrice * selectedSeats.length;
+    console.log("AMOUNT DEBUG");
+    console.log("Show price:", showData.showPrice);
+    console.log("Selected seats:", selectedSeats.length);
+    console.log("Calculated amount:", amount);
 
     const reservationExpiresAt = new Date(Date.now() + 30 * 60 * 1000);
     // create a new booking
@@ -424,6 +428,9 @@ export const createBooking = async (req, res) => {
       ticketCode: ticketCode,
       isTicketUsed: false,
     });
+    console.log("BOOKING SAVED");
+    console.log("Booking amount:", booking.amount);
+    console.log("Payment amount:", booking.paymentAmount);
 
     // Stripe payment initialize can be added here later
     // Handle Stripe payment
